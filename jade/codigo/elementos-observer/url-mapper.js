@@ -27,6 +27,7 @@ const urlMapper = {
   ultimaConsultaAPI: 0,
   CACHE_DURATION: 5 * 60 * 1000,
   urlEnEsperaDeRespuesta: {}, // {url: intervalId} para tracking de polling
+  panelActual: 'Sin panel', // 💾 Guardar el panel actual del modal
   
   /**
    * Obtiene la letra de campaña para una URL
@@ -280,6 +281,7 @@ const urlMapper = {
     const url = item.url;
     const panel = item.panel || 'Sin panel';
     this.modalAbierto = true;
+    this.panelActual = panel; // 💾 Guardar referencia al panel actual
     
     // 🔔 Reproducir sonido de alerta inmediatamente
     this.reproducirSonidoAlerta();
@@ -544,7 +546,7 @@ const urlMapper = {
       }
       
       // Guardar el mapeo
-      this.guardarMapeo(url, letra);
+      this.guardarMapeo(url, letra, this.panelActual); // ✅ Pasar el panel
       this.cola.shift(); // Quitar de la cola
       
       // Si hay más URLs en la cola, cargar la siguiente SIN CERRAR el modal
@@ -595,6 +597,7 @@ const urlMapper = {
     
     const nuevaUrl = nuevoItem.url;
     const nuevoPanel = nuevoItem.panel || 'Sin panel';
+    this.panelActual = nuevoPanel; // 💾 Actualizar referencia al panel actual
     
     // Actualizar el contenido del modal
     modal.innerHTML = `
@@ -792,7 +795,7 @@ const urlMapper = {
           return;
         }
         
-        this.guardarMapeo(nuevaUrl, letra);
+        this.guardarMapeo(nuevaUrl, letra, this.panelActual); // ✅ Pasar el panel
         this.cola.shift();
         
         if (this.cola.length > 0) {
@@ -859,12 +862,13 @@ const urlMapper = {
       this.cacheMapeos[url] = letra;
       
       // 2. Enviar al servidor API de forma ASÍNCRONA (no bloquea)
+      console.log(`📤 Guardando mapeo con PANEL: ${panel}`); // 📝 LOG DE DEBUG
       this.sincronizarAlServidor(url, letra, panel);
       
       // 3. Notificar al popup
       sendPopupEvent('urlMapped', 'success', { url: url.substring(0, 40) + '...', letra });
       
-      console.log(`✅ Mapeado: ${url} → ${letra} (sincronizando con API)`);
+      console.log(`✅ Mapeado: ${url} → ${letra} (Panel: ${panel}) (sincronizando con API)`);
     } catch (error) {
       console.error('❌ Error al guardar mapeo:', error);
     }
@@ -878,7 +882,15 @@ const urlMapper = {
    */
   async sincronizarAlServidor(url, letra, panel = 'Sin panel') {
     try {
-      console.log(`🔄 Enviando mapeo al servidor: ${url} → ${letra}`);
+      console.log(`🔄 Enviando mapeo al servidor: ${url} → ${letra} | Panel: "${panel}"`); // 📝 LOG CON PANEL
+      
+      const payload = {
+        url: url,
+        letra: letra.toUpperCase(),
+        panel: panel
+      };
+      
+      console.log(`📦 Payload a enviar:`, payload); // 📝 LOG DEL PAYLOAD
       
       const response = await fetch(`${MAPEOS_SERVER_URL}/mapeos`, {
         method: 'POST',
@@ -886,11 +898,7 @@ const urlMapper = {
           'Content-Type': 'application/json',
           'X-Machine-ID': this.getMachineId()
         },
-        body: JSON.stringify({
-          url: url,
-          letra: letra.toUpperCase(),
-          panel: panel
-        })
+        body: JSON.stringify(payload)
       });
       
       if (response.ok) {
